@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+:root {
+  --ivory: #faf7f2;
+  --sand: #efe8dc;
+  --ink: #1c1a17;
+  --muted: #6f675c;
+  --gold: #b08d57;
+  --gold-dark: #8a6b3d;
+  --line: #e2d9ca;
+}
+
+@theme inline {
+  --color-ivory: var(--ivory);
+  --color-sand: var(--sand);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-gold: var(--gold);
+  --color-gold-dark: var(--gold-dark);
+  --color-line: var(--line);
+  --font-sans: var(--font-body);
+  --font-serif: var(--font-display);
+}
+
+body {
+  background: var(--ivory);
+  color: var(--ink);
+}
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-full bg-ink px-6 py-3 text-sm font-medium tracking-wide text-ivory transition hover:bg-gold-dark disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.btn-outline {
+  @apply inline-flex items-center justify-center gap-2 rounded-full border border-ink px-6 py-3 text-sm font-medium tracking-wide transition hover:bg-ink hover:text-ivory;
+}
+
+.input {
+  @apply w-full rounded-lg border border-line bg-white px-4 py-3 text-sm outline-none transition focus:border-gold focus:ring-2 focus:ring-gold/20;
+}
+
+.eyebrow {
+  @apply text-xs font-medium tracking-[0.25em] text-gold-dark uppercase;
+}
