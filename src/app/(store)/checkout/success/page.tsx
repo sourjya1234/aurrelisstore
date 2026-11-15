@@ -10,7 +10,7 @@ export default function SuccessPage({ searchParams }: PageProps<"/checkout/succe
       <p className="eyebrow">Order confirmed</p>
       <h1 className="mt-3 font-serif text-5xl">Thank you.</h1>
       <p className="mt-6 text-muted">
-        Your pieces are being prepared with care. A confirmation will arrive in your inbox shortly.
+        Your order is being packed with care. A confirmation will arrive in your inbox shortly.
       </p>
       <Suspense fallback={<p className="mt-6 h-6" />}>
         <OrderNumber searchParams={searchParams} />

@@ -1,6 +1,6 @@
 # Aurrelis Store: Frontend
 
-Storefront for Aurrelis, built with **Next.js 16** (App Router, Cache Components), **React 19**, **TypeScript** and **Tailwind CSS v4**.
+Storefront for Aurrelis mood perfumes, built with **Next.js 16** (App Router, Cache Components), **React 19**, **TypeScript** and **Tailwind CSS v4**.
 
 ## Quick start
 
@@ -45,7 +45,11 @@ The store uses the existing **aurrelis-ops** Supabase project (`eqixqpcxlfedijqg
 | `io_moods` | Categories (Warm, Bright, Grounded, Soft) |
 | `io_products` | Product name, slug, description, top/heart/base notes, accent colour. Only `is_active` rows are shown |
 | `io_product_variants` | Sizes and prices (`price_inr`, whole rupees). A variant with `stock = 0` shows as sold out |
-| `io_orders`, `io_order_items` | Orders. `payment_ref` holds the Razorpay order id; `status` moves `pending` → `paid` after the signature is verified |
+| `io_orders`, `io_order_items` | Orders, including the full shipping address (`shipping_line2`, `shipping_state`). `payment_ref` holds the Razorpay order id |
+
+**Stock.** Checkout rejects a quantity larger than the variant's `stock`. Once Razorpay's signature is verified, `io_mark_order_paid()` marks the order paid and deducts stock for its items in one transaction; calling it twice never deducts twice. The catalog cache is then refreshed so sold-out badges update. If you change stock by hand in Supabase, call `POST /api/revalidate` (or wait up to an hour) to see it on the site.
+
+The columns and function come from `supabase/migrations/20261115_io_orders_address_and_paid_stock.sql`, already applied to the project.
 
 1. Set `COMMERCE_PROVIDER=supabase`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`.
 2. Existing RLS lets visitors read active products and variants only. Orders are written with the service-role key, which stays on the server.
@@ -60,6 +64,12 @@ The store uses the existing **aurrelis-ops** Supabase project (`eqixqpcxlfedijqg
 - **Review requests**: `review_outreach`
 
 Each pipeline has status and segment breakdowns, follow-ups per day for the last 30 days, overdue follow-ups, and a searchable, filterable table. Data is cached for about a minute; **Refresh data** reloads it.
+
+Click a lead to open its page (`/dashboard/leads/investors/<id>` or `/dashboard/leads/b2b/<id>`), where you can:
+
+- change its status (Under discussion, Won, Not interested, Bounced, the values the table allows), status detail, owner and remark; a status change is also written to the follow-up log
+- log a follow-up with channel, note, next follow-up date and optional new status; it's recorded under your email
+- see the full follow-up history
 
 Sign-in uses the existing `app_users` table with the same rule as the database's `is_crm()` function: the account must be active and have `crm_access` (or the `owner` role). Set `DASHBOARD_PASSWORD` (shared password) and `DASHBOARD_SESSION_SECRET` (signs the session cookie). The dashboard reads with the service-role key, so it needs `SUPABASE_SERVICE_ROLE_KEY` too.
 

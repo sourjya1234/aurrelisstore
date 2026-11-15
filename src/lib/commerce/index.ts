@@ -56,6 +56,9 @@ export async function priceLines(lines: CartLineInput[]): Promise<PricedLine[]> 
     const variant = product?.variants.find((v) => v.id === line.variantId);
     if (!product || !variant) throw new Error(`Item no longer available: ${line.handle}`);
     if (!variant.available) throw new Error(`${product.title} (${variant.title}) is sold out`);
+    if (variant.inventory !== undefined && quantity > variant.inventory) {
+      throw new Error(`Only ${variant.inventory} left of ${product.title} (${variant.title})`);
+    }
     priced.push({ product, variant, quantity });
   }
   return priced;

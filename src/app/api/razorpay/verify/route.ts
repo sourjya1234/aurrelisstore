@@ -1,3 +1,5 @@
+import { revalidateTag } from "next/cache";
+import { PRODUCTS_TAG } from "@/lib/commerce";
 import { markSupabaseOrderPaid } from "@/lib/commerce/providers/supabase";
 import { verifyRazorpaySignature } from "@/lib/razorpay";
 
@@ -15,6 +17,8 @@ export async function POST(request: Request) {
   }
   try {
     const id = await markSupabaseOrderPaid(orderId);
+    // Stock changed, so refresh the cached catalog (sold-out badges, quantities).
+    if (id) revalidateTag(PRODUCTS_TAG, "max");
     return Response.json({ ok: true, orderId: id ?? orderId });
   } catch (err) {
     console.error("Failed to mark order paid", err);

@@ -14,6 +14,7 @@ export function AddToCart({ product }: { product: Product }) {
 
   const variant = product.variants.find((v) => v.id === variantId) ?? firstAvailable;
   const showVariants = product.variants.length > 1;
+  const maxQuantity = Math.max(1, Math.min(20, variant?.inventory ?? 20));
 
   function add() {
     if (!variant?.available) return;
@@ -44,6 +45,7 @@ export function AddToCart({ product }: { product: Product }) {
                 disabled={!v.available}
                 onClick={() => {
                   setVariantId(v.id);
+                  setQuantity((q) => Math.min(q, Math.max(1, v.inventory ?? 20)));
                   setAdded(false);
                 }}
                 aria-pressed={v.id === variant?.id}
@@ -74,7 +76,7 @@ export function AddToCart({ product }: { product: Product }) {
             type="button"
             className="px-4 py-3"
             aria-label="Increase quantity"
-            onClick={() => setQuantity((q) => Math.min(20, q + 1))}
+            onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))}
           >
             +
           </button>

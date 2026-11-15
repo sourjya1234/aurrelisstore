@@ -1,6 +1,6 @@
 import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
-import { restAll } from "@/lib/supabase-rest";
+import { rest, restAll } from "@/lib/supabase-rest";
 
 /**
  * Read models for the outreach dashboard, built from the Aurrelis Ops tables:
@@ -325,4 +325,170 @@ export async function getReviewSummary(): Promise<ReviewSummary> {
         rating: r.rating,
       })),
   };
+}
+
+/* ------------------------------ Lead detail + writes ------------------------------ */
+
+/** Statuses allowed by the CHECK constraint on investor_outreach / b2b_outreach. */
+export const LEAD_STATUSES = ["Under discussion", "Won", "Not interested", "Bounced – no need to contact"] as const;
+export type LeadStatus = (typeof LEAD_STATUSES)[number];
+
+/** Common values already used in status_detail, offered as suggestions. */
+export const STATUS_DETAIL_SUGGESTIONS = [
+  "Sent – awaiting reply",
+  "Replied – positive",
+  "Replied – neutral",
+  "Favourable – reply due",
+  "Auto-acknowledgement only",
+  "Declined – not aligned",
+  "Declined – round passed",
+  "Bounced – invalid email",
+  "Unsubscribed",
+];
+
+export const FOLLOWUP_CHANNELS = ["email", "call", "whatsapp", "meeting", "linkedin", "other"] as const;
+
+const TABLES: Record<PipelineKind, { leads: string; logs: string; nameCol: string; groupCol: string }> = {
+  investors: { leads: "investor_outreach", logs: "investor_followup_log", nameCol: "name", groupCol: "investor_type" },
+  b2b: { leads: "b2b_outreach", logs: "b2b_followup_log", nameCol: "company", groupCol: "segment" },
+};
+
+export function isPipelineKind(v: unknown): v is PipelineKind {
+  return v === "investors" || v === "b2b";
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const isUuid = (v: unknown): v is string => typeof v === "string" && UUID.test(v);
+
+export type LeadDetail = Omit<PipelineLead, "followupCount" | "lastFollowup" | "nextFollowup"> & {
+  personalHook: string | null;
+  sourceUrl: string | null;
+  followups: (Followup & { id: string; kind: string })[];
+};
+
+/** One lead with its full follow-up history. Not cached: the detail page should always be current. */
+export async function getLeadDetail(kind: PipelineKind, id: string): Promise<LeadDetail | undefined> {
+  if (!isUuid(id)) return undefined;
+  const t = TABLES[kind];
+  const [rows, logs] = await Promise.all([
+    rest<Record<string, string | null>[]>(`${t.leads}?select=*&id=eq.${id}&limit=1`, { serviceRole: true, cache: "no-store" }),
+    rest<(FollowupRow & { id: string; kind: string })[]>(
+      `${t.logs}?select=id,kind,${FOLLOWUP_COLS}&lead_id=eq.${id}&order=logged_at.desc`,
+      { serviceRole: true, cache: "no-store" },
+    ),
+  ]);
+  const r = rows[0];
+  if (!r) return undefined;
+  return {
+    id: r.id!,
+    name: r[t.nameCol] ?? "",
+    group: r[t.groupCol] ?? null,
+    email: r.email ?? null,
+    phone: r.phone ?? null,
+    website: r.website ?? null,
+    country: r.country ?? null,
+    spoc: r.spoc_name ?? null,
+    status: r.status ?? "",
+    statusDetail: r.status_detail ?? null,
+    remark: r.remark ?? null,
+    createdAt: r.created_at!,
+    updatedAt: r.updated_at!,
+    personalHook: r.personal_hook ?? null,
+    sourceUrl: r.source_url ?? null,
+    followups: logs.map((l) => ({
+      id: l.id,
+      kind: l.kind,
+      loggedAt: l.logged_at,
+      channel: l.channel,
+      note: l.note,
+      statusAfter: l.status_after,
+      nextFollowup: l.next_followup,
+      by: l.by_email,
+    })),
+  };
+}
+
+/** Updates a lead's status fields and records the change in its follow-up log. */
+export async function updateLead(
+  kind: PipelineKind,
+  id: string,
+  patch: { status: LeadStatus; statusDetail: string | null; remark: string | null; spoc: string | null },
+  byEmail: string,
+) {
+  const t = TABLES[kind];
+  const [before] = await rest<{ status: string }[]>(`${t.leads}?select=status&id=eq.${id}`, {
+    serviceRole: true,
+    cache: "no-store",
+  });
+  if (!before) throw new Error("Lead not found");
+  await rest(`${t.leads}?id=eq.${id}`, {
+    method: "PATCH",
+    serviceRole: true,
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      status: patch.status,
+      status_detail: patch.statusDetail,
+      remark: patch.remark,
+      spoc_name: patch.spoc,
+      updated_at: new Date().toISOString(),
+    }),
+  });
+  if (before.status !== patch.status) {
+    await rest(t.logs, {
+      method: "POST",
+      serviceRole: true,
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({
+        lead_id: id,
+        kind: "manual",
+        channel: null,
+        note: `Status changed from "${before.status}" to "${patch.status}" on the dashboard.`,
+        status_after: patch.status,
+        by_email: byEmail,
+      }),
+    });
+  }
+}
+
+/** Adds a follow-up to a lead's log; optionally moves the lead to a new status. */
+export async function logFollowup(
+  kind: PipelineKind,
+  id: string,
+  entry: {
+    channel: string;
+    note: string;
+    nextFollowup: string | null;
+    statusAfter: LeadStatus | null;
+  },
+  byEmail: string,
+) {
+  const t = TABLES[kind];
+  const [lead] = await rest<{ status: string }[]>(`${t.leads}?select=status&id=eq.${id}`, {
+    serviceRole: true,
+    cache: "no-store",
+  });
+  if (!lead) throw new Error("Lead not found");
+  await rest(t.logs, {
+    method: "POST",
+    serviceRole: true,
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      lead_id: id,
+      kind: "manual",
+      channel: entry.channel,
+      note: entry.note,
+      next_followup: entry.nextFollowup,
+      status_after: entry.statusAfter ?? lead.status,
+      by_email: byEmail,
+    }),
+  });
+  await rest(`${t.leads}?id=eq.${id}`, {
+    method: "PATCH",
+    serviceRole: true,
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      ...(entry.statusAfter ? { status: entry.statusAfter } : {}),
+      updated_at: new Date().toISOString(),
+    }),
+  });
 }

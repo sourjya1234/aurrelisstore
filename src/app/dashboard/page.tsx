@@ -331,7 +331,7 @@ function PipelineView({ pipeline, sp }: { pipeline: Pipeline; sp: SP }) {
             </thead>
             <tbody className="divide-y divide-line">
               {rows.map((l) => (
-                <LeadRow key={l.id} lead={l} />
+                <LeadRow key={l.id} lead={l} kind={pipeline.kind} />
               ))}
               {rows.length === 0 && (
                 <tr>
@@ -380,13 +380,15 @@ const fmtDate = (iso: string | null | undefined) =>
       })
     : "—";
 
-function LeadRow({ lead }: { lead: PipelineLead }) {
+function LeadRow({ lead, kind }: { lead: PipelineLead; kind: Pipeline["kind"] }) {
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
   const overdue = lead.nextFollowup && lead.nextFollowup <= today;
   return (
     <tr className="align-top hover:bg-ivory/60">
       <td className="max-w-[260px] px-4 py-3">
-        <p className="font-medium">{lead.name}</p>
+        <Link href={`/dashboard/leads/${kind}/${lead.id}`} className="font-medium hover:text-gold-dark hover:underline">
+          {lead.name}
+        </Link>
         {lead.email && (
           <a href={`mailto:${lead.email}`} className="block truncate text-xs text-muted hover:text-gold-dark">
             {lead.email}

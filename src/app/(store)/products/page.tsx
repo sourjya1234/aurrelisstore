@@ -72,7 +72,7 @@ async function Catalog({ searchParams }: { searchParams: SearchParams }) {
           ))}
         </div>
       </div>
-      <p className="mb-6 text-sm text-muted">{list.length} pieces</p>
+      <p className="mb-6 text-sm text-muted">{list.length} {list.length === 1 ? "scent" : "scents"}</p>
       <ProductGrid products={list} />
     </>
   );

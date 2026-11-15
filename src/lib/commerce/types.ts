@@ -15,6 +15,8 @@ export type ProductVariant = {
   price: Money;
   available: boolean;
   sku?: string;
+  /** Units in stock, when the backend tracks inventory. */
+  inventory?: number;
 };
 
 export type Product = {

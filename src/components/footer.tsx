@@ -12,8 +12,8 @@ export async function Footer() {
         <div className="md:col-span-2">
           <p className="font-serif text-2xl tracking-[0.3em] uppercase">Aurrelis</p>
           <p className="mt-3 max-w-sm text-sm text-muted">
-            Demi-fine jewellery in 18k gold vermeil and sterling silver, designed to be layered,
-            gifted and worn every day.
+            Small-batch perfumes made around moods, for the moments you want to feel a certain
+            way: warm, bright, grounded or soft.
           </p>
         </div>
         <div>
@@ -32,7 +32,7 @@ export async function Footer() {
           <ul className="mt-4 space-y-2 text-sm text-muted">
             <li>Free shipping over ₹2,500</li>
             <li>15-day returns</li>
-            <li>1-year plating warranty</li>
+            <li>Store away from heat and direct light</li>
           </ul>
         </div>
       </div>

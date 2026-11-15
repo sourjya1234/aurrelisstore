@@ -12,12 +12,12 @@ export default async function Home() {
       <section className="relative overflow-hidden bg-sand">
         <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-20 sm:px-6 md:grid-cols-2 md:py-28">
           <div>
-            <p className="eyebrow">The Everyday Gold Edit</p>
+            <p className="eyebrow">Fragrance for every feeling</p>
             <h1 className="mt-4 font-serif text-5xl leading-[1.05] sm:text-6xl lg:text-7xl">
-              Jewellery that keeps your light.
+              Scent for how you want to feel.
             </h1>
             <p className="mt-6 max-w-md text-muted">
-              Demi-fine pieces in 18k gold vermeil, made to be layered, gifted and lived in.
+              Small-batch perfumes built around moods. Pick the feeling, wear the scent.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link href="/products" className="btn">Shop the collection</Link>
@@ -43,7 +43,7 @@ export default async function Home() {
         <div className="mb-10 flex items-end justify-between">
           <div>
             <p className="eyebrow">Featured</p>
-            <h2 className="mt-2 font-serif text-4xl">Signature pieces</h2>
+            <h2 className="mt-2 font-serif text-4xl">Signature scents</h2>
           </div>
           <Link href="/products" className="text-sm underline underline-offset-4 hover:text-gold-dark">
             View all
@@ -53,7 +53,7 @@ export default async function Home() {
       </section>
 
       <section className="mx-auto max-w-7xl px-4 pt-20 sm:px-6">
-        <p className="eyebrow">Shop by category</p>
+        <p className="eyebrow">Shop by mood</p>
         <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
           {categories.map((c) => (
             <Link

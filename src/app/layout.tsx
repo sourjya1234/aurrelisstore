@@ -16,10 +16,10 @@ const body = Inter({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
   title: {
-    default: "Aurrelis — Fine Jewellery",
+    default: "Aurrelis — Mood Perfumes",
     template: "%s · Aurrelis",
   },
-  description: "Demi-fine jewellery, made to be worn every day.",
+  description: "Small-batch perfumes made around moods: warm, bright, grounded and soft.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -58,6 +58,7 @@ function toProduct(row: ProductRow): Product | undefined {
       price: { amount: v.price_inr, currencyCode: CURRENCY },
       available: v.stock > 0,
       sku: v.sku,
+      inventory: v.stock,
     }));
   // A product with no active variant can't be bought, so hide it.
   if (variants.length === 0) return undefined;
@@ -129,9 +130,10 @@ export const supabaseProvider: CommerceProvider = {
         shipping_name: customer.name,
         shipping_email: customer.email,
         shipping_phone: customer.phone,
-        shipping_line1: [address.line1, address.line2].filter(Boolean).join(", "),
-        // io_orders has no state column, so keep it with the city.
-        shipping_city: [address.city, address.state].filter(Boolean).join(", "),
+        shipping_line1: address.line1,
+        shipping_line2: address.line2 ?? null,
+        shipping_city: address.city,
+        shipping_state: address.state,
         shipping_pin: address.postalCode,
         subtotal_inr: subtotal,
         shipping_inr: shipping,
@@ -178,18 +180,16 @@ export const supabaseProvider: CommerceProvider = {
 };
 
 /**
- * Marks an order paid once Razorpay's signature has been verified.
- * payment_ref keeps the Razorpay order id (rzp order -> payment is 1:1 in Razorpay's dashboard).
+ * Marks an order paid once Razorpay's signature has been verified, and deducts
+ * stock for its items in the same database transaction (io_mark_order_paid).
+ * payment_ref holds the Razorpay order id. Returns the order number, or
+ * undefined if the order was already paid (so stock is never deducted twice).
  */
 export async function markSupabaseOrderPaid(razorpayOrderId: string) {
-  const rows = await rest<{ order_number: string }[]>(
-    `io_orders?payment_ref=eq.${encodeURIComponent(razorpayOrderId)}&status=eq.pending`,
-    {
-      method: "PATCH",
-      serviceRole: true,
-      headers: { Prefer: "return=representation" },
-      body: JSON.stringify({ status: "paid" }),
-    },
-  );
-  return rows[0]?.order_number;
+  const orderNumber = await rest<string | null>("rpc/io_mark_order_paid", {
+    method: "POST",
+    serviceRole: true,
+    body: JSON.stringify({ p_payment_ref: razorpayOrderId }),
+  });
+  return orderNumber ?? undefined;
 }
