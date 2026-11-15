@@ -21,7 +21,11 @@ export default async function Home() {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link href="/products" className="btn">Shop the collection</Link>
-              <Link href="/products?category=Necklaces" className="btn-outline">New necklaces</Link>
+              {categories[0] && (
+                <Link href={`/products?category=${encodeURIComponent(categories[0])}`} className="btn-outline">
+                  Explore {categories[0]}
+                </Link>
+              )}
             </div>
           </div>
           <div aria-hidden className="relative mx-auto aspect-square w-full max-w-md">

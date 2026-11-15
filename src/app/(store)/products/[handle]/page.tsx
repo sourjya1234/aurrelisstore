@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { AddToCart } from "@/components/add-to-cart";
 import { ProductGrid } from "@/components/product-card";
 import { ProductImage } from "@/components/product-image";
+import { ProductTile } from "@/components/product-tile";
 import { getProduct, getProducts } from "@/lib/commerce";
 import { formatMoney } from "@/lib/format";
 
@@ -58,7 +59,9 @@ export default async function ProductPage({ params }: PageProps<"/products/[hand
               </div>
             ))
           ) : (
-            <div className="aspect-[4/5] rounded-2xl bg-sand" />
+            <div className="relative aspect-[4/5] overflow-hidden rounded-2xl bg-sand">
+              <ProductTile product={product} large />
+            </div>
           )}
         </div>
 
@@ -76,8 +79,7 @@ export default async function ProductPage({ params }: PageProps<"/products/[hand
           <AddToCart product={product} />
 
           <ul className="mt-10 space-y-3 border-t border-line pt-6 text-sm text-muted">
-            <li>✦ 18k gold vermeil over sterling silver</li>
-            <li>✦ Hypoallergenic &amp; nickel-free</li>
+            {product.details?.map((d) => <li key={d}>✦ {d}</li>)}
             <li>✦ Free shipping over ₹2,500 · 15-day returns</li>
           </ul>
         </div>

@@ -20,6 +20,7 @@ npm run dev                  # http://localhost:3000
 | `/cart` | Bag (stored in `localStorage`, synced across tabs) |
 | `/checkout` | Contact and shipping form, then payment via the active provider |
 | `/checkout/success` | Order confirmation |
+| `/dashboard` | Ops dashboard: investor, B2B and review-request outreach (sign-in required) |
 
 ## Commerce providers
 
@@ -28,7 +29,7 @@ The data layer lives in `src/lib/commerce`. Set `COMMERCE_PROVIDER` to choose a 
 | Provider | Catalog | Checkout |
 | --- | --- | --- |
 | `mock` (default) | `providers/mock-data.ts` | Simulated order, goes straight to the success page |
-| `supabase` | `products` and `product_variants` tables | Writes a pending order to `orders`, pays with Razorpay Checkout, verifies the signature server-side, marks the order paid |
+| `supabase` | `io_products`, `io_product_variants`, `io_moods` in the Aurrelis Ops project | Writes a pending order to `io_orders` + `io_order_items`, pays with Razorpay Checkout, verifies the signature server-side, marks the order paid |
 | `shopify` | Storefront API | `cartCreate`, then redirects to Shopify's hosted checkout |
 
 Pages only call `getProducts()` and `getProduct()` from `@/lib/commerce`. These are cached with `"use cache"` (1 hour, tag `products`). To add another backend, implement `CommerceProvider` in `types.ts`.
@@ -37,9 +38,30 @@ Pages only call `getProducts()` and `getProduct()` from `@/lib/commerce`. These 
 
 ### Supabase + Razorpay setup
 
-1. Run `supabase/migrations/0001_storefront.sql` (Supabase SQL editor or `supabase db push`).
-2. Set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`.
-3. RLS lets visitors read published products only. Orders can be read and written only with the service-role key, which stays on the server.
+The store uses the existing **aurrelis-ops** Supabase project (`eqixqpcxlfedijqghggo`). No migration is needed; it reads and writes these tables:
+
+| Table | Used for |
+| --- | --- |
+| `io_moods` | Categories (Warm, Bright, Grounded, Soft) |
+| `io_products` | Product name, slug, description, top/heart/base notes, accent colour. Only `is_active` rows are shown |
+| `io_product_variants` | Sizes and prices (`price_inr`, whole rupees). A variant with `stock = 0` shows as sold out |
+| `io_orders`, `io_order_items` | Orders. `payment_ref` holds the Razorpay order id; `status` moves `pending` → `paid` after the signature is verified |
+
+1. Set `COMMERCE_PROVIDER=supabase`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`.
+2. Existing RLS lets visitors read active products and variants only. Orders are written with the service-role key, which stays on the server.
+3. Products have no image column yet, so cards show a tile in the product's `accent_color`.
+
+### Ops dashboard
+
+`/dashboard` shows the outreach pipelines from the same project:
+
+- **Investors**: `investor_outreach` + `investor_followup_log`
+- **B2B partners**: `b2b_outreach` + `b2b_followup_log`
+- **Review requests**: `review_outreach`
+
+Each pipeline has status and segment breakdowns, follow-ups per day for the last 30 days, overdue follow-ups, and a searchable, filterable table. Data is cached for about a minute; **Refresh data** reloads it.
+
+Sign-in uses the existing `app_users` table with the same rule as the database's `is_crm()` function: the account must be active and have `crm_access` (or the `owner` role). Set `DASHBOARD_PASSWORD` (shared password) and `DASHBOARD_SESSION_SECRET` (signs the session cookie). The dashboard reads with the service-role key, so it needs `SUPABASE_SERVICE_ROLE_KEY` too.
 
 ### Shopify setup
 

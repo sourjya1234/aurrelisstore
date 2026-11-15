@@ -14,6 +14,7 @@ export type ProductVariant = {
   title: string;
   price: Money;
   available: boolean;
+  sku?: string;
 };
 
 export type Product = {
@@ -28,6 +29,10 @@ export type Product = {
   price: Money;
   compareAtPrice?: Money;
   variants: ProductVariant[];
+  /** Short bullet points shown on the product page (materials, notes, care). */
+  details?: string[];
+  /** Brand colour used for the placeholder tile when a product has no images. */
+  accentColor?: string;
 };
 
 export type CartLineInput = {

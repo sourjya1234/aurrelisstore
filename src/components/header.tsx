@@ -1,15 +1,13 @@
 import Link from "next/link";
+import { getCategories } from "@/lib/commerce";
 import { CartLink } from "./cart-link";
 
-const nav = [
-  { href: "/products", label: "Shop all" },
-  { href: "/products?category=Rings", label: "Rings" },
-  { href: "/products?category=Necklaces", label: "Necklaces" },
-  { href: "/products?category=Earrings", label: "Earrings" },
-  { href: "/products?category=Bracelets", label: "Bracelets" },
-];
-
-export function Header() {
+export async function Header() {
+  const categories = await getCategories();
+  const nav = [
+    { href: "/products", label: "Shop all" },
+    ...categories.slice(0, 5).map((c) => ({ href: `/products?category=${encodeURIComponent(c)}`, label: c })),
+  ];
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-ivory/90 backdrop-blur">
       <div className="bg-ink py-2 text-center text-[11px] tracking-[0.2em] text-ivory uppercase">

@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Payment signature mismatch" }, { status: 400 });
   }
   try {
-    const id = await markSupabaseOrderPaid(orderId, paymentId);
+    const id = await markSupabaseOrderPaid(orderId);
     return Response.json({ ok: true, orderId: id ?? orderId });
   } catch (err) {
     console.error("Failed to mark order paid", err);

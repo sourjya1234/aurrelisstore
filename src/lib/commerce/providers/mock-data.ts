@@ -112,5 +112,6 @@ export const mockProducts: Product[] = seeds.map((s, i) => {
     price: inr(Math.min(...variants.map((v) => v.price.amount))),
     compareAtPrice: s.compareAt ? inr(s.compareAt) : undefined,
     variants,
+    details: ["18k gold vermeil over sterling silver", "Hypoallergenic & nickel-free"],
   };
 });

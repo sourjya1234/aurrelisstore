@@ -1,9 +1,11 @@
 import { cacheLife } from "next/cache";
 import Link from "next/link";
+import { getCategories } from "@/lib/commerce";
 
 export async function Footer() {
   "use cache";
   cacheLife("days");
+  const categories = (await getCategories()).slice(0, 3);
   return (
     <footer className="mt-24 border-t border-line bg-sand">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-4">
@@ -17,9 +19,12 @@ export async function Footer() {
         <div>
           <p className="eyebrow">Shop</p>
           <ul className="mt-4 space-y-2 text-sm">
-            <li><Link href="/products" className="hover:text-gold-dark">All jewellery</Link></li>
-            <li><Link href="/products?category=Rings" className="hover:text-gold-dark">Rings</Link></li>
-            <li><Link href="/products?category=Necklaces" className="hover:text-gold-dark">Necklaces</Link></li>
+            <li><Link href="/products" className="hover:text-gold-dark">Shop all</Link></li>
+            {categories.map((c) => (
+              <li key={c}>
+                <Link href={`/products?category=${encodeURIComponent(c)}`} className="hover:text-gold-dark">{c}</Link>
+              </li>
+            ))}
           </ul>
         </div>
         <div>

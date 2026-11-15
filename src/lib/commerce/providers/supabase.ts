@@ -1,155 +1,195 @@
 import "server-only";
+import { randomBytes } from "node:crypto";
 import { createRazorpayOrder } from "@/lib/razorpay";
+import { rest } from "@/lib/supabase-rest";
 import { requireEnv } from "../env";
 import type { CommerceProvider, Product } from "../types";
 
 /**
- * Catalog stored in Supabase (see supabase/migrations), payments via Razorpay.
- * Talks to Supabase's PostgREST API directly so no SDK is needed.
+ * Catalog and orders stored in the Aurrelis Ops Supabase project (`io_*` tables),
+ * payments via Razorpay.
+ *
+ * Tables used:
+ * - io_moods            (id, label, sort_order)                    -> category
+ * - io_products         (slug, name, mood_id, notes, accent_color)  -> product
+ * - io_product_variants (sku, size_ml, price_inr, stock, is_active) -> variants
+ * - io_orders / io_order_items                                      -> checkout
+ *
+ * RLS lets anon read active products and variants. Orders are written with the
+ * service role key, which never leaves the server.
  */
+
+type VariantRow = {
+  id: string;
+  sku: string;
+  size_ml: number;
+  price_inr: number;
+  stock: number;
+  is_active: boolean;
+};
 
 type ProductRow = {
   id: string;
-  handle: string;
-  title: string;
+  slug: string;
+  name: string;
   description: string | null;
-  category: string | null;
-  tags: string[] | null;
-  featured: boolean;
-  images: { url: string; alt?: string }[] | null;
-  price: number;
-  compare_at_price: number | null;
-  currency: string;
-  product_variants: { id: string; title: string; price: number | null; available: boolean; position: number }[];
+  top_note: string | null;
+  heart_note: string | null;
+  base_note: string | null;
+  accent_color: string | null;
+  created_at: string;
+  io_moods: { id: string; label: string } | null;
+  io_product_variants: VariantRow[];
 };
 
-const SELECT = "*,product_variants(*)";
+const SELECT =
+  "id,slug,name,description,top_note,heart_note,base_note,accent_color,created_at," +
+  "io_moods(id,label),io_product_variants(id,sku,size_ml,price_inr,stock,is_active)";
 
-function restUrl(path: string) {
-  return `${requireEnv("SUPABASE_URL").replace(/\/$/, "")}/rest/v1/${path}`;
-}
+const CURRENCY = "INR";
 
-async function rest<T>(path: string, init: RequestInit & { serviceRole?: boolean } = {}): Promise<T> {
-  const key = init.serviceRole
-    ? requireEnv("SUPABASE_SERVICE_ROLE_KEY")
-    : requireEnv("SUPABASE_ANON_KEY");
-  const res = await fetch(restUrl(path), {
-    ...init,
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-      ...init.headers,
-    },
-  });
-  if (!res.ok) {
-    throw new Error(`Supabase request failed (${res.status}): ${await res.text()}`);
-  }
-  return res.json() as Promise<T>;
-}
+function toProduct(row: ProductRow): Product | undefined {
+  const variants = row.io_product_variants
+    .filter((v) => v.is_active)
+    .sort((a, b) => a.size_ml - b.size_ml)
+    .map((v) => ({
+      id: v.id,
+      title: `${v.size_ml} ml`,
+      price: { amount: v.price_inr, currencyCode: CURRENCY },
+      available: v.stock > 0,
+      sku: v.sku,
+    }));
+  // A product with no active variant can't be bought, so hide it.
+  if (variants.length === 0) return undefined;
 
-function toProduct(row: ProductRow): Product {
-  const currencyCode = row.currency ?? "INR";
-  const variantRows = [...(row.product_variants ?? [])].sort((a, b) => a.position - b.position);
-  const variants = variantRows.length
-    ? variantRows.map((v) => ({
-        id: v.id,
-        title: v.title,
-        price: { amount: Number(v.price ?? row.price), currencyCode },
-        available: v.available,
-      }))
-    : [{ id: row.id, title: "Default", price: { amount: Number(row.price), currencyCode }, available: true }];
+  const notes = [
+    row.top_note && `Top: ${row.top_note}`,
+    row.heart_note && `Heart: ${row.heart_note}`,
+    row.base_note && `Base: ${row.base_note}`,
+  ].filter((n): n is string => Boolean(n));
+
+  const inStock = variants.some((v) => v.available);
   return {
     id: row.id,
-    handle: row.handle,
-    title: row.title,
+    handle: row.slug,
+    title: row.name,
     description: row.description ?? "",
-    category: row.category ?? "Other",
-    tags: row.tags ?? [],
-    featured: row.featured,
-    images: (row.images ?? []).map((img) => ({ url: img.url, alt: img.alt ?? row.title })),
-    price: { amount: Math.min(...variants.map((v) => v.price.amount)), currencyCode },
-    compareAtPrice: row.compare_at_price
-      ? { amount: Number(row.compare_at_price), currencyCode }
-      : undefined,
+    category: row.io_moods?.label ?? "Other",
+    tags: [row.io_moods?.id, inStock ? "in-stock" : "sold-out"].filter((t): t is string => Boolean(t)),
+    // No "featured" flag in io_products: feature what can actually be bought.
+    featured: inStock,
+    images: [],
+    accentColor: row.accent_color ?? undefined,
+    price: { amount: Math.min(...variants.map((v) => v.price.amount)), currencyCode: CURRENCY },
     variants,
+    details: notes,
   };
+}
+
+function compact<T>(items: (T | undefined)[]): T[] {
+  return items.filter((x): x is T => x !== undefined);
+}
+
+/** Human-friendly, unique-enough order number, e.g. AUR-261115-7KQ2XF. */
+function newOrderNumber() {
+  const d = new Date();
+  const ymd = [d.getUTCFullYear() % 100, d.getUTCMonth() + 1, d.getUTCDate()]
+    .map((n) => String(n).padStart(2, "0"))
+    .join("");
+  const suffix = randomBytes(4).readUInt32BE(0).toString(36).toUpperCase().padStart(6, "0").slice(-6);
+  return `AUR-${ymd}-${suffix}`;
 }
 
 export const supabaseProvider: CommerceProvider = {
   name: "supabase",
   async getProducts() {
-    const rows = await rest<ProductRow[]>(
-      `products?select=${SELECT}&published=eq.true&order=created_at.desc`,
-    );
-    return rows.map(toProduct);
+    const rows = await rest<ProductRow[]>(`io_products?select=${SELECT}&is_active=eq.true&order=created_at.asc`);
+    return compact(rows.map(toProduct));
   },
   async getProduct(handle) {
     const rows = await rest<ProductRow[]>(
-      `products?select=${SELECT}&published=eq.true&handle=eq.${encodeURIComponent(handle)}&limit=1`,
+      `io_products?select=${SELECT}&is_active=eq.true&slug=eq.${encodeURIComponent(handle)}&limit=1`,
     );
     return rows[0] ? toProduct(rows[0]) : undefined;
   },
   async createCheckout(lines, customer) {
-    const currency = lines[0]?.variant.price.currencyCode ?? "INR";
-    const total = lines.reduce((sum, l) => sum + l.variant.price.amount * l.quantity, 0);
-    const amountMinor = Math.round(total * 100);
+    const subtotal = lines.reduce((sum, l) => sum + l.variant.price.amount * l.quantity, 0);
+    const shipping = 0;
+    const total = subtotal + shipping;
+    const { address } = customer;
 
     // 1. Record a pending order (service role bypasses RLS; never expose this key to the browser).
-    const [order] = await rest<{ id: string }[]>("orders", {
+    const [order] = await rest<{ id: string; order_number: string }[]>("io_orders", {
       method: "POST",
       serviceRole: true,
       headers: { Prefer: "return=representation" },
       body: JSON.stringify({
+        order_number: newOrderNumber(),
         status: "pending",
-        customer_name: customer.name,
-        customer_email: customer.email,
-        customer_phone: customer.phone,
-        shipping_address: customer.address,
-        line_items: lines.map((l) => ({
-          product_id: l.product.id,
-          variant_id: l.variant.id,
-          title: l.product.title,
-          variant_title: l.variant.title,
-          unit_price: l.variant.price.amount,
-          quantity: l.quantity,
-        })),
-        amount: total,
-        currency,
+        shipping_name: customer.name,
+        shipping_email: customer.email,
+        shipping_phone: customer.phone,
+        shipping_line1: [address.line1, address.line2].filter(Boolean).join(", "),
+        // io_orders has no state column, so keep it with the city.
+        shipping_city: [address.city, address.state].filter(Boolean).join(", "),
+        shipping_pin: address.postalCode,
+        subtotal_inr: subtotal,
+        shipping_inr: shipping,
+        total_inr: total,
       }),
     });
 
-    // 2. Create the matching Razorpay order and link it.
-    const rzp = await createRazorpayOrder(amountMinor, currency, order.id);
-    await rest(`orders?id=eq.${order.id}`, {
+    await rest("io_order_items", {
+      method: "POST",
+      serviceRole: true,
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(
+        lines.map((l) => ({
+          order_id: order.id,
+          variant_id: l.variant.id,
+          product_name: l.product.title,
+          sku: l.variant.sku ?? l.variant.id,
+          unit_price_inr: l.variant.price.amount,
+          quantity: l.quantity,
+        })),
+      ),
+    });
+
+    // 2. Create the matching Razorpay order and store its id in payment_ref.
+    const amountMinor = total * 100;
+    const rzp = await createRazorpayOrder(amountMinor, CURRENCY, order.order_number);
+    await rest(`io_orders?id=eq.${order.id}`, {
       method: "PATCH",
       serviceRole: true,
-      headers: { Prefer: "return=representation" },
-      body: JSON.stringify({ razorpay_order_id: rzp.id }),
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ payment_ref: rzp.id }),
     });
 
     return {
       type: "razorpay",
       keyId: requireEnv("RAZORPAY_KEY_ID"),
       razorpayOrderId: rzp.id,
-      orderId: order.id,
+      orderId: order.order_number,
       amount: amountMinor,
-      currency,
+      currency: CURRENCY,
       customer: { name: customer.name, email: customer.email, phone: customer.phone },
     };
   },
 };
 
-/** Marks a Supabase order paid once Razorpay's signature has been verified. */
-export async function markSupabaseOrderPaid(razorpayOrderId: string, razorpayPaymentId: string) {
-  const rows = await rest<{ id: string }[]>(
-    `orders?razorpay_order_id=eq.${encodeURIComponent(razorpayOrderId)}`,
+/**
+ * Marks an order paid once Razorpay's signature has been verified.
+ * payment_ref keeps the Razorpay order id (rzp order -> payment is 1:1 in Razorpay's dashboard).
+ */
+export async function markSupabaseOrderPaid(razorpayOrderId: string) {
+  const rows = await rest<{ order_number: string }[]>(
+    `io_orders?payment_ref=eq.${encodeURIComponent(razorpayOrderId)}&status=eq.pending`,
     {
       method: "PATCH",
       serviceRole: true,
       headers: { Prefer: "return=representation" },
-      body: JSON.stringify({ status: "paid", razorpay_payment_id: razorpayPaymentId }),
+      body: JSON.stringify({ status: "paid" }),
     },
   );
-  return rows[0]?.id;
+  return rows[0]?.order_number;
 }

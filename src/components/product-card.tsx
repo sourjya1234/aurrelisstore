@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Product } from "@/lib/commerce/types";
 import { formatMoney } from "@/lib/format";
 import { ProductImage } from "./product-image";
+import { ProductTile } from "./product-tile";
 
 export function ProductCard({ product, priority }: { product: Product; priority?: boolean }) {
   const image = product.images[0];
@@ -9,7 +10,7 @@ export function ProductCard({ product, priority }: { product: Product; priority?
   return (
     <Link href={`/products/${product.handle}`} className="group block">
       <div className="relative aspect-[4/5] overflow-hidden rounded-xl bg-sand">
-        {image && (
+        {image ? (
           <ProductImage
             src={image.url}
             alt={image.alt}
@@ -18,6 +19,8 @@ export function ProductCard({ product, priority }: { product: Product; priority?
             sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
             className="object-cover transition duration-500 group-hover:scale-105"
           />
+        ) : (
+          <ProductTile product={product} />
         )}
         {(product.compareAtPrice || soldOut || product.tags.includes("new")) && (
           <span className="absolute top-3 left-3 rounded-full bg-ivory/90 px-3 py-1 text-[10px] tracking-[0.15em] uppercase">
